@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="index.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script>
+    const Div = ({children}) => h('div', null, ...children)
+
+    const Comp = ({count=0}) =>
+        h('div', null,
+            h('input', {placeholder: count}),
+            h('button',  {
+                onClick: () => r(h(Comp, {count: count + 1}))
+            }, 'Reload'),
+            count > 0 && h(Div, null, count),
+        )
+
+    const $root = document.getElementById('root')
+
+    const renderer = root => {
+        let old = null
+        return node => {
+            updateElement(root, node, old)
+            old = node
+        }
+    }
+
+    let r = renderer($root)
+    r(h(Comp, {count: 0}))
+</script>
+</body>
+</html>

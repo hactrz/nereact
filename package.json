@@ -1,0 +1,10 @@
+{
+  "name": "nereact",
+  "version": "0.0.1",
+  "description": "UI library",
+  "main": "index.js",
+  "repository": "https://github.com/hactrz/nereact.git",
+  "author": "hactr",
+  "license": "MIT",
+  "private": false
+}

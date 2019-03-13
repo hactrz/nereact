@@ -8,29 +8,22 @@
 <body>
 <div id="root"></div>
 <script>
-    const Div = ({children}) => h('div', null, ...children)
+    const Div = () => h('div', null,
+        h('slot')
+    )
 
-    const Comp = ({count=0}) =>
-        h('div', null,
+    const Comp = ({count: propsCount = 0}, {count: stateCount, update}) => {
+        let count = stateCount || propsCount
+        return h(Div, null,
             h('input', {placeholder: count}),
-            h('button',  {
-                onClick: () => r(h(Comp, {count: count + 1}))
+            h('button', {
+                onClick: () => update({count: count + 1})
             }, 'Reload'),
-            count > 0 && h(Div, null, count),
-        )
-
-    const $root = document.getElementById('root')
-
-    const renderer = root => {
-        let old = null
-        return node => {
-            updateElement(root, node, old)
-            old = node
-        }
+            (count % 2 === 0) && h(Div, null, count),
+        );
     }
 
-    let r = renderer($root)
-    r(h(Comp, {count: 0}))
+    render(document.getElementById('root'), h(Comp, {count: 0}))
 </script>
 </body>
 </html>

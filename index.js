@@ -1,8 +1,33 @@
 window.nereact = {}
 
-/** @jsx h */
 function h(type, props, ...children) {
-    return { type, props: props || {}, children }
+    let dom = false
+    if (typeof type === 'string') {
+        if (type !== 'slot')
+            dom = type
+        type = makeDOMFunction(type)
+    }
+    if (typeof type === 'function')
+        return { treeMaker: type, dom, props: props || {}, children, source: null, state: null }
+    throw TypeError('Element must be either string with dom node name or function')
+}
+
+function checkVDOMObject(node) {
+    return typeOf(node) === 'object' && 'treeMaker' in node && 'props' in node && 'children' in node && 'dom' in node
+        && 'source' in node && 'state' in node
+}
+
+function Slot() {}
+const cache = {slot: Slot}
+
+function makeDOMFunction(tagName) {
+    if (!(tagName in cache))
+        cache[tagName] = function domMaker(props) {
+            const $el = document.createElement(tagName)
+            setProps($el, props)
+            return $el
+        }
+    return cache[tagName]
 }
 
 function setBooleanProp($target, name, value) {
@@ -83,50 +108,73 @@ function updateProps($target, newProps, oldProps = {}) {
     })
 }
 
-function createElement(node) {
-    if (node === null || node === false)
+//type VDOMNode = null | undefined | boolean | string | number | VDOMNodeObject
+
+function isComment(node) {
+    return ['null', 'undefined', 'boolean'].includes(typeOf(node))
+}
+
+function isString(node) {
+    return ['string', 'number'].includes(typeOf(node))
+}
+
+function isPrimitive(node) {
+    return isComment(node) || isString(node)
+}
+
+function makeDOM(nodeObject) {
+    if (!nodeObject.dom)
+        throw TypeError('Trying to make DOM from non-DOM node')
+    return nodeObject.treeMaker(nodeObject.props)
+}
+
+function createHTMLElement(node) {
+    if (isComment(node))
         return document.createComment(String(node))
-    if (typeof node === 'string' || typeof node === 'number')
+    if (isString((node)))
         return document.createTextNode(node)
-    if (typeof node.type === 'function')
-        return createElement(node.type({...node.props, children: node.children}))
-    const $el = document.createElement(node.type)
-    setProps($el, node.props)
-    node.children
-        .map(createElement)
-        .forEach($el.appendChild.bind($el))
+    if (!checkVDOMObject(node))
+        throw TypeError('Wrong vDOM node format')
+    const $el = makeDOM(node)
+    node.el = $el
+    node.children.forEach(c => $el.appendChild(createHTMLElement(c)))
     return $el
 }
 
-function changed(node1, node2) {
-    return typeof node1 !== typeof node2 ||
-        typeof node1 === 'string' && node1 !== node2 ||
-        typeof node1.type === 'function' ||
-        node1.type !== node2.type ||
-        node1.props && node1.props.forceUpdate
+function typeOf(v) {
+    if (v === null)
+        return 'null'
+    return typeof v
+}
+
+function typeChanged(node1, node2) {
+    return typeOf(node1) !== typeOf(node2)
+        || typeOf(node1) !== 'object' && node1 !== node2
+        || node1.dom && node1.treeMaker !== node2.treeMaker
 }
 
 function updateElement($parent, newNode, oldNode, index = 0) {
-    if (typeof newNode === 'number')
+    if (typeOf(newNode) === 'number')
         newNode = newNode.toString()
-    if (typeof oldNode === 'number')
+    if (typeOf(oldNode) === 'number')
         oldNode = oldNode.toString()
 
-    if (!oldNode) {
+    if (oldNode === undefined) {
         $parent.appendChild(
-            createElement(newNode)
+            createHTMLElement(newNode)
         )
-    } else if (!newNode) {
+    } else if (newNode === undefined) {
         $parent.removeChild(
             $parent.childNodes[index]
         )
-    } else if (changed(newNode, oldNode)) {
+    } else if (typeChanged(newNode, oldNode)) {
         $parent.replaceChild(
-            createElement(newNode),
+            createHTMLElement(newNode),
             $parent.childNodes[index]
         )
     }
-    else if (newNode.type) {
+    else if (newNode.treeMaker) {
+        newNode.el = oldNode.el
         updateProps(
             $parent.childNodes[index],
             newNode.props,
@@ -143,4 +191,54 @@ function updateElement($parent, newNode, oldNode, index = 0) {
             )
         }
     }
+}
+
+function replaceSlot(node, children) {
+    if (isPrimitive(node))
+        return node
+    if (node.treeMaker === Slot)
+        throw Error('Slot can not be root element in component')
+    if (node.children.find(n => n.treeMaker === Slot)) {
+        if (node.children.length > 1)
+            throw Error('Slot must be single child of element')
+        node.children = children
+        return node
+    }
+    node.children = node.children.map(c => replaceSlot(c, children))
+    return node
+}
+
+function makeTree(nodeObject) {
+    if (nodeObject.dom)
+        return makeDOM(nodeObject)
+    return nodeObject.treeMaker(nodeObject.props, nodeObject.state)
+}
+
+function openTree(node, prevTree) {
+    if (isPrimitive(node))
+        return node
+    const children = node.children.map((c, i) => openTree(c, prevTree ? prevTree.source.children[i] : undefined))
+    if (node.dom)
+        return {...node, children}
+    if (node.treeMaker === Slot)
+        return node
+    node.state = (prevTree && prevTree.source.treeMaker === node.treeMaker) ? prevTree.source.state : {
+        update(newState) {
+            if (newState)
+                Object.assign(node.state, newState)
+            const newTree = openTree(makeTree(openedTree.source), openedTree)
+            const {el} = openedTree
+            updateElement(el.parentNode, newTree, openedTree, Array.from(el.parentNode.childNodes).indexOf(el))
+            openedTree = newTree
+            openedTree.source = node
+        }
+    }
+    const rootNode = makeTree(node)
+    let openedTree = openTree(rootNode, prevTree)
+    openedTree.source = node
+    return replaceSlot(openedTree, children)
+}
+
+function render($root, node) {
+    updateElement($root, openTree(node))
 }

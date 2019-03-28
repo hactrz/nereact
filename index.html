@@ -3,27 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <title>Title</title>
-    <script src="index.js"></script>
+    <link rel="stylesheet" href="index.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/mocha/mocha.css" />
 </head>
 <body>
+<div id="mocha"></div>
 <div id="root"></div>
-<script>
-    const Div = () => h('div', null,
-        h('slot')
-    )
-
-    const Comp = ({count: propsCount = 0}, {count: stateCount, update}) => {
-        let count = stateCount || propsCount
-        return h(Div, null,
-            h('input', {placeholder: count}),
-            h('button', {
-                onClick: () => update({count: count + 1})
-            }, 'Reload'),
-            (count % 2 === 0) && h(Div, null, count),
-        );
-    }
-
-    render(document.getElementById('root'), h(Comp, {count: 0}))
-</script>
+<script type="module" src="./example.js"></script>
 </body>
 </html>

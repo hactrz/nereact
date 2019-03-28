@@ -1,0 +1,33 @@
+.nav{
+    display:inline-block;
+    background-color: #03A9F4;
+    border-radius:4px;
+    cursor: pointer;
+}
+
+.nav a{
+    display:inline-block;
+    padding: 18px 30px;
+    color: white;
+    font-weight:bold;
+    font-size:16px;
+    text-decoration:none;
+    text-transform: uppercase;
+    background-color:transparent;
+}
+
+.nav a:first-child{
+    border-radius:4px 0 0 4px;
+}
+
+.nav a:last-child{
+    border-radius:0 4px 4px 0;
+}
+
+.nav a.active {
+    background-color: #7156e3;
+}
+
+.content {
+
+}

@@ -1,5 +1,3 @@
-window.nereact = {}
-
 function h(type, props, ...children) {
     let dom = false
     if (typeof type === 'string') {
@@ -12,9 +10,35 @@ function h(type, props, ...children) {
     throw TypeError('Element must be either string with dom node name or function')
 }
 
+export {h, render, classNames}
+
 function checkVDOMObject(node) {
     return typeOf(node) === 'object' && 'treeMaker' in node && 'props' in node && 'children' in node && 'dom' in node
         && 'source' in node && 'state' in node
+}
+
+function classNames () {
+    let classes = []
+
+    for (let arg of arguments) {
+        if (!arg) continue
+        let argType = typeof arg
+        if (argType === 'string' || argType === 'number') {
+            classes.push(arg)
+        } else if (Array.isArray(arg) && arg.length) {
+            let inner = classNames.apply(null, arg)
+            if (inner) {
+                classes.push(inner)
+            }
+        } else if (argType === 'object') {
+            for (let [key, value] of Object.entries(arg)) {
+                if (value) {
+                    classes.push(key)
+                }
+            }
+        }
+    }
+    return classes.join(' ')
 }
 
 function Slot() {}

@@ -1,15 +1,16 @@
 import {h, render, classNames} from './index.js'
-import {box, autorun, decorate, object} from './rethink.js'
-/*const fn = observable('a')
-const r = reaction(() => fn.get().toUpperCase(), FN => console.log(FN))
-when(() => fn.get() === 'c', () => console.log('!!'))
-observe(fn, (res) => console.log('observe', res))
-fn.set('b')
+import {box, autorun, decorate, object, observe, reaction, whenever, when, array} from './rethink.js'
+const fn = box('a')
+//const r = reaction(() => fn.get().toUpperCase(), FN => console.log(FN))
+whenever(() => fn.get() === 'c', () => console.log('!!'))
+when(() => fn.get() === 'c', () => console.log('when'))
+// observe(fn, (res) => console.log('observe', res))
+// fn.set('b')
 fn.set('c')
 fn.set('d')
-fn.set('D')
 fn.set('c')
-r()*/
+// fn.set('c')
+//r()
 //when(()=>true, ()=>console.log(1))
 
 function print(a) {
@@ -83,13 +84,13 @@ class Person {
 // a.push('C')
 // a[10] = '1'
 
-const o = object({test: [1,2,3], o1: {dog1: 'Jim', dog2: 'Bark'}, o2: 'cat'})
-autorun(()=> print(o))
-o['A'] = 'a'
-o['B'] = 'b'
-o['C'] = 'c'
-o[0] = '1'
-o.test = '1234567'
-o.o1.dog1 = 'Name'
-o.o1 = [1, 5, 7]
-o.o1[1] = 'z'
+// const o = object({test: [1,2,3], o1: {dog1: 'Jim', dog2: 'Bark'}, o2: 'cat'})
+// autorun(()=> print(o))
+// o['A'] = 'a'
+// o['B'] = 'b'
+// o['C'] = 'c'
+// o[0] = '1'
+// o.test = '1234567'
+// o.o1.dog1 = 'Name'
+// o.o1 = [1, 5, 7]
+// o.o1[1] = 'z'

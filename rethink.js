@@ -93,24 +93,77 @@ function runPendingCells() {
     }
 }
 
+function observableInterface(cell) {
+    return {
+        get: cell.get.bind(cell),
+        set: cell.set.bind(cell),
+    }
+}
+
+function computedInterface(cell) {
+    return {
+        get: cell.get.bind(cell),
+    }
+}
+
+/**@typedef {Object} Observable
+ * @property {function} get - получает значение
+ * @property {function} set - устанавливает новое значение
+ */
+
+/**@typedef {Object} Computed
+ * @property {function} get - получает вычисленное значение
+ */
+
+/** Делает значение наблюдаемым
+ * @param {*} [value] - наблюдаемое значение
+ * @return Observable
+ */
 export function box(value) {
-    return new Cell(value)
+    return observableInterface(new Cell(value))
 }
 
-export function computed(fn) {
-    return new Cell(null, fn)
+/**
+ * @callback computedFunction
+ * @return {*} value - вычисленное значение
+*/
+
+/**Создает вычисляемое значение, которое можно получить с помощью .get()
+ * Перезапускается по необходимости при изменении её зависимостей
+ * Если не произошло изменений зависимостей, не перезапускается.
+ * Вызывается только по требованию: .get(), autorun()
+ * @param {computedFunction} computedFn - функция, которая вычисляет значение.
+ * @return Computed
+ */
+export function computed(computedFn) {
+    return computedInterface(new Cell(null, computedFn))
 }
 
-export function autorun(fn) {
-    const cell = new Cell(null, fn, true)
+/**Перезапускает effect при изменении его зависимостей.
+ * @param {function} effect - функция, которая запускается при изменении её зависимостей
+ * @return {function} функция, останавливающая перезапуски
+ */
+export function autorun(effect) {
+    const cell = new Cell(null, effect, true)
     cell.get()
     return () => cell.unsubscribe()
 }
 
+/**При изменении результата выполнения fn запускается effect
+ * @param {function} fn - функция, которая запускается при изменении её зависимостей
+ * @param {function} effect - функция, которая запускается при изменении результата вызова fn
+ * @param {Object} params - если передано true effect выполняется сразу
+ * @return {function} функция, останавливающая перезапуски
+ */
 export function reaction(fn, effect, {fireImmediately=false} = {}) {
     return observe(computed(fn), effect, {fireImmediately})
 }
 
+/**effect выполняется один раз, когда fn возвращает true
+ * @param {function} fn - функция
+ * @param {function} effect - функция, которая запускается, когда fn возвращает true
+ * @return {function} функция, которая отменяет выполнение эффекта
+ */
 export function when(fn, effect) {
     let immediate = true
     const stop = whenever(fn, () => {
@@ -121,13 +174,26 @@ export function when(fn, effect) {
     })
     if (!immediate)
         stop()
+    immediate = false
     return stop
 }
 
+/**effect выполняется всегда, когда fn возвращает true
+ * @param {function} fn - функция, которая запускается при изменении её зависимостей
+ * @param {function} effect - функция, которая запускается при изменении результата вызова fn
+ * @return {function} функция, останавливающая перезапуски
+ */
 export function whenever(fn, effect) {
     return reaction(fn, res => res && effect(), {fireImmediately: true})
 }
 
+/**. При изменении cell запускает effect, передавая ему значение cell
+ * @param {Observable | Computed} cell - observable или computed, за которыми необходимо наблюдать
+ * @param {function} cb - функция, которая запускается при изменении значения cell.
+ * Принимает значение cell.get()
+ * @param {Object} params - если передано true cb вызывается сразу
+ * @return {function} функция, останавливающая перезапуски
+ */
 export function observe(cell, cb, {fireImmediately=false} = {}) {
     return autorun(() => {
         const res = cell.get()
@@ -138,6 +204,11 @@ export function observe(cell, cb, {fireImmediately=false} = {}) {
     })
 }
 
+/**. Делает свойства объекта наблюдаемыми, может устанавливать свойство в computed с помощью get()
+ * @param {Object} object - Объект, свойства которого должны стать наблюдаемыми
+ * @param {Object} decorator - Объект, пара ключ-значение в котором
+ * представлены названием наблюдаемого свойства и типом, которое определяет его поведение
+ */
 export function decorate(object, decorator) {
     for (let [key, value] of Object.entries(decorator))  {
         let cell = value(object[key])
@@ -150,6 +221,9 @@ export function decorate(object, decorator) {
     }
 }
 
+/**. Делает наблюдаемыми элементы массива а так же его длину
+ * @param {Array} arr - Массив, элементы и длина которого должны стать наблюдаемыми
+ */
 export function array(arr) {
     if (!Array.isArray(arr))
         throw TypeError('Argument must be an array')
@@ -183,6 +257,9 @@ export function array(arr) {
     })
 }
 
+/**. Делает наблюдаемыми свойства объекта
+ * @param {Object} obj - Объект, свойства которого должны стать наблюдаемыми
+ */
 export function object(obj) {
     if (typeof obj !== 'object' || obj === null)
         throw TypeError('Argument must be an object')

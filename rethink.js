@@ -253,7 +253,13 @@ export function array(arr) {
             if (prop === $s)
                 return true
             return prop in target
-        }
+        },
+        deleteProperty(target, prop) {
+            if (map.has(prop)) {
+                map.get(prop).set(undefined)
+            }
+            return delete target[prop]
+        },
     })
 }
 
@@ -271,6 +277,8 @@ export function object(obj) {
     let dump = observable(false)
     return new Proxy(obj, {
         get(target, prop) {
+            if (!map.has(prop))
+                map.set(prop, box())
             const res = map.get(prop)
             return res ? res.get() : target[prop]
         },
@@ -294,7 +302,14 @@ export function object(obj) {
             if (prop === $s)
                 return true
             return prop in target
-        }
+        },
+        deleteProperty(target, prop) {
+            if (map.has(prop)) {
+                map.get(prop).set(undefined)
+                dump.set(!dump.get())
+            }
+            return delete target[prop]
+        },
     })
 }
 
@@ -308,6 +323,32 @@ function isObject(o) {
     return typeof o === 'object' && o !== null
 }
 
-function isObservableObject(o) {
+export function isObservableObject(o) {
     return isObject(o) && ($s in o)
+}
+
+export function observeObject(o, effect) {
+    if (!isObservableObject(o))
+        throw TypeError('First argument should be an observable object')
+    let prev
+    return autorun(() => {
+        Object.entries(o) // to trigger autorun on keys and values changing
+        if (prev && !areEqualShallow(prev, o))
+            effect(o)
+        prev = {...o}
+    })
+}
+
+export function areEqualShallow(a, b) {
+    for(let key of Object.keys(a)) {
+        if(!(key in b) || a[key] !== b[key]) {
+            return false
+        }
+    }
+    for(let key of Object.keys(b)) {
+        if(!(key in a) || a[key] !== b[key]) {
+            return false
+        }
+    }
+    return true
 }

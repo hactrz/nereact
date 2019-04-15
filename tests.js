@@ -1,4 +1,4 @@
-import {box, computed, autorun, reaction, observe, whenever, when} from './rethink.js'
+import {box, computed, autorun, reaction, observe, whenever, when, array, object, decorate, observeObject} from './rethink.js'
 
 import 'https://unpkg.com/mocha/mocha.js'
 import 'https://unpkg.com/chai/chai.js'
@@ -9,13 +9,20 @@ mocha.setup('bdd')
 chai.should()
 
 describe("box", () => {
-    it("get && set working", () => {
+    it("get && set work", () => {
         let o = box()
         chai.assert.isUndefined(o.get())
         o.set('test')
         chai.assert.deepEqual(o.get(), 'test')
         o.set(1)
         chai.assert.notDeepEqual(o.get(), 'test')
+    })
+    it("observable value has not changed", () => {
+        let o = box('test')
+        let cb = sinon.spy()
+        reaction(() => o.get(), cb)
+        o.set('test')
+        cb.should.have.been.callCount(0)
     })
 })
 
@@ -66,7 +73,7 @@ describe("autorun", () => {
         o.set('dog')
         cb.should.have.been.calledTwice
     })
-    it("called once", () => {
+    it("stop works", () => {
         let o = box('cat')
         let cb = sinon.spy(()=> o.get())
         const stop = autorun(cb)
@@ -78,13 +85,19 @@ describe("autorun", () => {
 })
 
 describe("reaction", () => {
-    it("cb was called exactly once", () => {
+    it("works", () => {
         const o = box('John')
         let cb = sinon.spy()
-        reaction(() => o.get(), cb)
+        const stop = reaction(() => o.get(), cb)
         o.set('hey')
         cb.calledWith('hey')
         cb.should.have.been.calledOnce
+        o.set('asd')
+        cb.calledWith('asd')
+        cb.should.have.been.calledTwice
+        stop()
+        o.set('q')
+        cb.should.have.been.calledTwice
     })
     it("works with fireImmediately", () => {
         const o = box('John')
@@ -149,6 +162,138 @@ describe("observe", () => {
         o.set('test')
         cb.should.have.been.calledTwice
         cb.should.have.been.calledWith('test')
+    })
+})
+
+describe("array", () => {
+    it("shallow observable works", () => {
+        const a = array(['z', {name: 'Jim'}, [1, {test: 'Test'}, 7]])
+        let cb = sinon.spy()
+        reaction(() => a[0], cb)
+        a[0] = 'test'
+        cb.should.have.been.calledOnce
+        chai.assert.deepEqual(a[0], 'test')
+        reaction(() => a[1], cb)
+        a[1] = {test: 'Test'}
+        cb.should.have.been.calledTwice
+        chai.assert.deepEqual(a[1], {test: 'Test'})
+        reaction(() => a[2], cb)
+        a[2] = [1,'b',7]
+        cb.should.have.been.callCount(3)
+        chai.assert.deepEqual(a[2], [1,'b',7])
+    })
+    it("deep observable works", () => {
+        const a = array(['z', {name: 'Jim'}, 5])
+        let cb = sinon.spy()
+        reaction(() => a[1].name, cb)
+        a[1].name = 'Hey'
+        cb.should.have.been.calledOnce
+        a[1] = {name: 'Test'}
+        cb.should.have.been.calledTwice
+    })
+    it("length is observable", () => {
+        const a = array(['z', 2, 5, 7])
+        let cb = sinon.spy()
+        reaction(() => a.length, cb)
+        a.push('test')
+        chai.assert.deepEqual(a.length, 5)
+        a.pop()
+        chai.assert.deepEqual(a.length, 4)
+        a.splice(0, 2, 'test')
+        chai.assert.deepEqual(a.length, 3)
+        chai.assert.deepEqual(a, ['test', 5, 7])
+        cb.should.have.been.callCount(3)
+    })
+    it("delete work", () => {
+        const a = array(['z', 2, 5])
+        let cb = sinon.spy()
+        reaction(() => a[2], cb)
+        a.pop()
+        cb.should.have.been.calledOnce
+        a.push(3)
+        cb.should.have.been.calledTwice
+    })
+})
+
+describe("object", () => {
+    it("shallow observable works", () => {
+        const a = object({test: [1,2,3], o1: {dog1: 'Jim', dog2: 'Bark'}, o2: 'cat'})
+        let cb = sinon.spy()
+        reaction(() => a.test, cb)
+        a.test = 'test'
+        reaction(() => a.o2, cb)
+        a.o2 = 'cat'
+        cb.should.have.been.calledOnce
+    })
+    it("deep observable works", () => {
+        const a = object({test: [1,2,3], o1: {dog1: 'Jim', dog2: 'Bark'}, o2: 'cat'})
+        let cb = sinon.spy()
+        reaction(() => a.o1.dog1, cb)
+        a.o1.dog1 = 'test'
+        reaction(() => a.test[1], cb)
+        a.test[1] = 'test'
+        cb.should.have.been.calledTwice
+    })
+    it("delete work", () => {
+        const a = object({test: [1,2,3], o1: {dog1: 'Jim', dog2: 'Bark'}, o2: 'cat'})
+        let cb = sinon.spy()
+        reaction(() => a.test, cb)
+        delete a.test
+        a.test = 'z'
+        cb.should.have.been.calledTwice
+    })
+    it("new prop is observable", () => {
+        const a = object({})
+        let cb = sinon.spy()
+        reaction(() => a.test, cb)
+        a.test = 'z'
+        cb.should.have.been.calledOnce
+    })
+})
+
+describe("decorate", () => {
+    it("work", () => {
+        const person = {
+            name: "John",
+            age: 42,
+            showAge: false,
+
+            get labelText() {
+                return this.showAge ? `${this.name} (age: ${this.age})` : this.name
+            }
+        }
+        decorate(person, {name: box, age: box, showAge: box})
+        let cb = sinon.spy()
+        reaction(() => person.labelText, cb)
+        person.showAge = true
+        cb.should.have.been.calledOnce
+    })
+})
+
+describe("observeObject", () => {
+    it("works", () => {
+        const o = object({})
+        let cb = sinon.spy()
+        const stop = observeObject(o, cb)
+        o.hey = 1
+        cb.should.have.been.calledOnce
+        o.hey = 2
+        cb.should.have.been.calledTwice
+        stop()
+        o.hey = 3
+        cb.should.have.been.calledTwice
+    })
+    it("works 2", () => {
+        const o = object({})
+        let cb = sinon.spy()
+        const stop = observeObject(o, cb)
+        o.hey = 1
+        cb.should.have.been.calledOnce
+        o.hey = 2
+        cb.should.have.been.calledTwice
+        stop()
+        o.hey = 3
+        cb.should.have.been.calledTwice
     })
 })
 

@@ -2,8 +2,8 @@ import {h, render, classNames} from './index.js'
 import {box, autorun, decorate, object, observe, reaction, whenever, when, array} from './rethink.js'
 const fn = box('a')
 //const r = reaction(() => fn.get().toUpperCase(), FN => console.log(FN))
-whenever(() => fn.get() === 'c', () => console.log('!!'))
-when(() => fn.get() === 'c', () => console.log('when'))
+    // whenever(() => fn.get() === 'c', () => console.log('!!'))
+// when(() => fn.get() === 'c', () => console.log('when'))
 // observe(fn, (res) => console.log('observe', res))
 // fn.set('b')
 fn.set('c')
@@ -16,7 +16,7 @@ fn.set('c')
 function print(a) {
     console.log(JSON.stringify(a, null, 2))
 }
-const Div = () => h('div', null,
+/*const Div = () => h('div', null,
     h('slot')
 )
 
@@ -52,7 +52,7 @@ const Comp = (props, {content = '', update}) => {
     );
 }
 
-render(document.getElementById('root'), h(Comp, {count: 0}))
+render(document.getElementById('root'), h(Comp, {count: 0}))*/
 
 class Person {
     name = "John"

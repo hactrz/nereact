@@ -1,3 +1,5 @@
+import {areEqualShallow, object, autorun} from './rethink.js'
+
 function h(type, props, ...children) {
     let dom = false
     if (typeof type === 'string') {
@@ -146,12 +148,6 @@ function isPrimitive(node) {
     return isComment(node) || isString(node)
 }
 
-function makeDOM(nodeObject) {
-    if (!nodeObject.dom)
-        throw TypeError('Trying to make DOM from non-DOM node')
-    return nodeObject.treeMaker(nodeObject.props)
-}
-
 function createHTMLElement(node) {
     if (isComment(node))
         return document.createComment(String(node))
@@ -159,7 +155,9 @@ function createHTMLElement(node) {
         return document.createTextNode(node)
     if (!checkVDOMObject(node))
         throw TypeError('Wrong vDOM node format')
-    const $el = makeDOM(node)
+    if (!node.dom)
+        throw TypeError('Trying to make DOM from non-DOM node')
+    const $el = node.treeMaker(node.props)
     node.el = $el
     node.children.forEach(c => $el.appendChild(createHTMLElement(c)))
     return $el
@@ -217,52 +215,66 @@ function updateElement($parent, newNode, oldNode, index = 0) {
     }
 }
 
-function replaceSlot(node, children) {
-    if (isPrimitive(node))
-        return node
-    if (node.treeMaker === Slot)
-        throw Error('Slot can not be root element in component')
-    if (node.children.find(n => n.treeMaker === Slot)) {
-        if (node.children.length > 1)
-            throw Error('Slot must be single child of element')
-        node.children = children
-        return node
+
+function runComponent(node, prevNode, onUpdate) {
+    if (node.dom)
+        throw TypeError('Cannot make tree from DOM virtual node')
+
+    const update = () => onUpdate(node.treeMaker(node.props, node.state))
+
+    const sameComp = prevNode && prevNode.treeMaker === node.treeMaker
+    if (sameComp) {
+        node.state = prevNode.state
+        if (!areEqualShallow(node.props, prevNode.props))
+            update()
     }
-    node.children = node.children.map(c => replaceSlot(c, children))
-    return node
+    else {
+        //todo destroy prev state and call unmount
+        node.state = object({})
+        autorun(update)
+    }
 }
 
-function makeTree(nodeObject) {
-    if (nodeObject.dom)
-        return makeDOM(nodeObject)
-    return nodeObject.treeMaker(nodeObject.props, nodeObject.state)
-}
-
-function openTree(node, prevTree) {
-    if (isPrimitive(node))
+function flatTreeFromNode(node, prevNode) {
+    //todo destroy prev state and call unmount if node type changes
+    if (isPrimitive(node) || node.treeMaker === Slot)
         return node
-    const children = node.children.map((c, i) => openTree(c, prevTree ? prevTree.source.children[i] : undefined))
+    //todo destroy prev state and call unmount
+    const children = node.children.map((c, i) => flatTreeFromNode(c, prevNode ? prevNode.children[i] : undefined))
     if (node.dom)
         return {...node, children}
-    if (node.treeMaker === Slot)
-        return node
-    node.state = (prevTree && prevTree.source.treeMaker === node.treeMaker) ? prevTree.source.state : {
-        update(newState) {
-            if (newState)
-                Object.assign(node.state, newState)
-            const newTree = openTree(makeTree(openedTree.source), openedTree)
-            const {el} = openedTree
-            updateElement(el.parentNode, newTree, openedTree, Array.from(el.parentNode.childNodes).indexOf(el))
-            openedTree = newTree
-            openedTree.source = node
-        }
+
+    let prevFlatTree = null, prevNestedTree
+    runComponent(node, prevNode, nestedTree => {
+        let flatTree = connectChildrenToSlot(flatTreeFromNode(nestedTree, prevNestedTree), children)
+        if (prevFlatTree)
+            updateFlatTree(flatTree, prevFlatTree)
+        prevFlatTree = flatTree
+        prevNestedTree = nestedTree
+    })
+    return prevFlatTree
+}
+
+function connectChildrenToSlot(flatTree, children) {
+    if (isPrimitive(flatTree))
+        return flatTree
+    if (flatTree.treeMaker === Slot)
+        throw Error('Slot can not be root element in component')
+    if (flatTree.children.find(n => n.treeMaker === Slot)) {
+        if (flatTree.children.length > 1)
+            throw Error('Slot must be single child of element')
+        flatTree.children = children
+        return flatTree
     }
-    const rootNode = makeTree(node)
-    let openedTree = openTree(rootNode, prevTree)
-    openedTree.source = node
-    return replaceSlot(openedTree, children)
+    flatTree.children = flatTree.children.map(c => connectChildrenToSlot(c, children))
+    return flatTree
+}
+
+function updateFlatTree(tree, prevTree) {
+    const {el} = prevTree
+    updateElement(el.parentNode, tree, prevTree, Array.from(el.parentNode.childNodes).indexOf(el))
 }
 
 function render($root, node) {
-    updateElement($root, openTree(node))
+    updateElement($root, flatTreeFromNode(node))
 }

@@ -120,6 +120,18 @@ describe("state", () => {
         two.should.have.been.calledOnce
         chai.assert.deepEqual(stateTwo.asd, undefined)
     })
+    it("empty children in component", () => {
+        let state
+        function Comp(props, s) {
+            state = s
+            return h('div', null,
+                s.content
+            )
+        }
+        const el = document.createElement('div')
+        render(el, h(Comp))
+        chai.assert.ok(el.lastElementChild)
+    })
 })
 
 describe("props", () => {

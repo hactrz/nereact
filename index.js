@@ -260,7 +260,7 @@ function connectChildrenToSlot(flatTree, children) {
         return flatTree
     if (flatTree.treeMaker === Slot)
         throw Error('Slot can not be root element in component')
-    if (flatTree.children.find(n => n.treeMaker === Slot)) {
+    if (flatTree.children.find(n => checkVDOMObject(n) && n.treeMaker === Slot)) {
         if (flatTree.children.length > 1)
             throw Error('Slot must be single child of element')
         flatTree.children = children

@@ -1,4 +1,4 @@
-import {areEqualShallow, object, autorun} from './rethink.js'
+import {areEqualShallow, object, reaction} from './rethink.js'
 
 function h(type, props, ...children) {
     let dom = false
@@ -8,7 +8,7 @@ function h(type, props, ...children) {
         type = makeDOMFunction(type)
     }
     if (typeof type === 'function')
-        return { treeMaker: type, dom, props: props || {}, children, source: null, state: null }
+        return { treeMaker: type, dom, props: props || {}, children, state: null }
     throw TypeError('Element must be either string with dom node name or function')
 }
 
@@ -16,7 +16,7 @@ export {h, render, classNames}
 
 function checkVDOMObject(node) {
     return typeOf(node) === 'object' && 'treeMaker' in node && 'props' in node && 'children' in node && 'dom' in node
-        && 'source' in node && 'state' in node
+        && 'state' in node
 }
 
 function classNames () {
@@ -220,18 +220,18 @@ function runComponent(node, prevNode, onUpdate) {
     if (node.dom)
         throw TypeError('Cannot make tree from DOM virtual node')
 
-    const update = () => onUpdate(node.treeMaker(node.props, node.state))
+    const build = () => node.treeMaker(node.props, node.state)
 
     const sameComp = prevNode && prevNode.treeMaker === node.treeMaker
     if (sameComp) {
         node.state = prevNode.state
         if (!areEqualShallow(node.props, prevNode.props))
-            update()
+            onUpdate(build())
     }
     else {
         //todo destroy prev state and call unmount
         node.state = object({})
-        autorun(update)
+        reaction(build, onUpdate, {fireImmediately: true})
     }
 }
 

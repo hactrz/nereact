@@ -1,9 +1,24 @@
 let CurrentObserver = null
-let PendingCells = new Set()
 
 const $s = Symbol('observable')
 
 class Cell {
+    static Pending = new Set()
+    static runPending() {
+        if (Cell.runPending.active)
+            return
+        let count = 0
+        do {
+            Cell.runPending.active = true
+            for (const cell of Array.from(Cell.Pending))
+                cell.actualize()
+            Cell.runPending.active = false
+            count++
+            if (count >= 100)
+                throw new Error('Cycle dependencies!')
+        } while (Array.from(Cell.Pending).filter(c => c.state !== 'actual').length)
+    }
+
     [$s] = true
     reactions = new Set()
     dependencies = new Set()
@@ -18,10 +33,11 @@ class Cell {
     mark(dirty = false) {
         this.state = dirty ? "dirty" : "check"
         for (const reaction of this.reactions) {
-            if (reaction.state === "actual") reaction.mark()
+            if (reaction.state === "actual")
+                reaction.mark()
         }
         if (this.active)
-            PendingCells.add(this)
+            Cell.Pending.add(this)
     }
 
     set(newValue) {
@@ -32,7 +48,7 @@ class Cell {
         for (const reaction of this.reactions) {
             reaction.mark(true)
         }
-        runPendingCells()
+        Cell.runPending()
         return true
     }
 
@@ -42,19 +58,27 @@ class Cell {
         CurrentObserver = this
         const oldDependencies = this.dependencies
         this.dependencies = new Set()
-        const newValue = this.fn()
+        this.state = "actual"
+        let newValue
+        try {
+            newValue = this.fn()
+        } catch (e) {
+            console.error('Exception in', this.fn)
+            console.error(e)
+        }
         CurrentObserver = currentObserver
         for (const dep of oldDependencies) {
-            if (!this.dependencies.has(dep)) dep.reactions.delete(this)
+            if (!this.dependencies.has(dep))
+                dep.reactions.delete(this)
         }
-        this.state = "actual"
-        return this.set(newValue)
+        this.set(newValue)
     }
 
     actualize() {
         if (this.state === "check") {
             for (const dep of this.dependencies) {
-                if (this.state === "dirty") break
+                if (this.state === "dirty")
+                    break
                 dep.actualize()
             }
             if (this.state === "dirty") {
@@ -68,7 +92,8 @@ class Cell {
     }
 
     get() {
-        if (this.state !== "actual") this.actualize()
+        if (this.state !== "actual")
+            this.actualize()
         if (CurrentObserver) {
             this.reactions.add(CurrentObserver)
             CurrentObserver.dependencies.add(this)
@@ -79,17 +104,12 @@ class Cell {
     unsubscribe() {
         for (const dep of this.dependencies) {
             dep.reactions.delete(this)
-            if (dep.reactions.size === 0) dep.unsubscribe()
+            if (dep.reactions.size === 0)
+                dep.unsubscribe()
         }
         this.state = "dirty"
         if (this.active)
-            PendingCells.delete(this)
-    }
-}
-
-function runPendingCells() {
-    for (const cell of PendingCells) {
-        cell.actualize()
+            Cell.Pending.delete(this)
     }
 }
 
@@ -104,6 +124,12 @@ function computedInterface(cell) {
     return {
         get: cell.get.bind(cell),
     }
+}
+
+export function clear() {
+    const copy = new Set(Cell.Pending)
+    for (let c of copy)
+        c.unsubscribe()
 }
 
 /**@typedef {Object} Observable
@@ -152,7 +178,7 @@ export function autorun(effect) {
 /**При изменении результата выполнения fn запускается effect
  * @param {function} fn - функция, которая запускается при изменении её зависимостей
  * @param {function} effect - функция, которая запускается при изменении результата вызова fn
- * @param {Object} params - если передано true effect выполняется сразу
+ * @param {boolean} fireImmediately - если передано true effect выполняется сразу
  * @return {function} функция, останавливающая перезапуски
  */
 export function reaction(fn, effect, {fireImmediately=false} = {}) {
@@ -166,7 +192,7 @@ export function reaction(fn, effect, {fireImmediately=false} = {}) {
  */
 export function when(fn, effect) {
     let immediate = true
-    const stop = whenever(fn, () => {
+    const stop = whenever(fn, function _whenEffect() {
         effect()
         if (!immediate)
             stop()
@@ -184,7 +210,7 @@ export function when(fn, effect) {
  * @return {function} функция, останавливающая перезапуски
  */
 export function whenever(fn, effect) {
-    return reaction(fn, res => res && effect(), {fireImmediately: true})
+    return reaction(fn, function _wheneverCheck(res) {res && effect()}, {fireImmediately: true})
 }
 
 /**. При изменении cell запускает effect, передавая ему значение cell
@@ -195,7 +221,7 @@ export function whenever(fn, effect) {
  * @return {function} функция, останавливающая перезапуски
  */
 export function observe(cell, cb, {fireImmediately=false} = {}) {
-    return autorun(() => {
+    return autorun(function _observeEffect() {
         const res = cell.get()
         if(fireImmediately)
             cb(res)
@@ -331,7 +357,7 @@ export function observeObject(o, effect) {
     if (!isObservableObject(o))
         throw TypeError('First argument should be an observable object')
     let prev
-    return autorun(() => {
+    return autorun(function _observeObjectCheck() {
         Object.entries(o) // to trigger autorun on keys and values changing
         if (prev && !areEqualShallow(prev, o))
             effect(o)

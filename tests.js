@@ -1,4 +1,6 @@
-import {box, computed, autorun, reaction, observe, whenever, when, array, object, decorate, observeObject} from './rethink.js'
+import {
+    box, computed, autorun, reaction, observe, whenever, when, array, object, decorate, observeObject, clear
+} from './rethink.js'
 
 import 'https://unpkg.com/mocha/mocha.js'
 import 'https://unpkg.com/chai/chai.js'
@@ -7,6 +9,10 @@ import 'https://unpkg.com/sinon-chai/lib/sinon-chai.js'
 
 mocha.setup('bdd')
 chai.should()
+
+afterEach(function() {
+    clear()
+})
 
 describe("box", () => {
     it("get && set work", () => {
@@ -60,7 +66,7 @@ describe("computed", () => {
 })
 
 describe("autorun", () => {
-    it("function was called exactly once", () => {
+    it("function was active exactly once", () => {
         let cb = sinon.spy()
         autorun(cb)
         cb.should.have.been.calledOnce
@@ -72,6 +78,8 @@ describe("autorun", () => {
         cb.should.have.been.calledOnce
         o.set('dog')
         cb.should.have.been.calledTwice
+        o.set('asd')
+        cb.should.have.been.calledThrice
     })
     it("stop works", () => {
         let o = box('cat')
@@ -82,14 +90,48 @@ describe("autorun", () => {
         o.set('dog')
         cb.should.have.been.calledOnce
     })
+    it("detect cycles", () => {
+        let o = box(1)
+        chai.assert.deepEqual(o.get(), 1)
+        const stop = autorun(() => {
+            if (o.get() > 1)
+                o.set(o.get()+1)
+        })
+        let ex = false
+        try {
+            o.set(2)
+        } catch (e) {
+            ex = true
+            chai.assert.include(e.message, 'Cycle')
+        }
+        stop()
+        chai.assert.isOk(ex)
+    })
+    it("autorun trigger himself", () => {
+        let o = box(1)
+        let cb = sinon.spy(() => o.get() && o.set(2))
+        autorun(cb)
+        cb.should.have.been.calledTwice
+    })
+    it("autorun active autorun", () => {
+        let o = box(1)
+        let inCb = sinon.spy(() => o.set(2))
+        let cb = sinon.spy(() => o.get() && autorun(inCb))
+        autorun(cb)
+        cb.should.have.been.calledTwice
+        inCb.should.have.been.calledTwice
+    })
 })
 
 describe("reaction", () => {
     it("works", () => {
         const o = box('John')
+        const r = sinon.spy(() => o.get())
         let cb = sinon.spy()
-        const stop = reaction(() => o.get(), cb)
+        const stop = reaction(r, cb)
+        r.should.have.been.calledOnce
         o.set('hey')
+        r.should.have.been.calledTwice
         cb.calledWith('hey')
         cb.should.have.been.calledOnce
         o.set('asd')
@@ -102,9 +144,12 @@ describe("reaction", () => {
     it("works with fireImmediately", () => {
         const o = box('John')
         let cb = sinon.spy()
-        reaction(() => o.get(), cb, {fireImmediately: true})
+        const r = sinon.spy(() => o.get())
+        reaction(r, cb, {fireImmediately: true})
+        r.should.have.been.calledOnce
         cb.calledWith('John')
         o.set('hey')
+        r.should.have.been.calledTwice
         cb.calledWith('hey')
         cb.should.have.been.calledTwice
     })
@@ -272,18 +317,6 @@ describe("decorate", () => {
 
 describe("observeObject", () => {
     it("works", () => {
-        const o = object({})
-        let cb = sinon.spy()
-        const stop = observeObject(o, cb)
-        o.hey = 1
-        cb.should.have.been.calledOnce
-        o.hey = 2
-        cb.should.have.been.calledTwice
-        stop()
-        o.hey = 3
-        cb.should.have.been.calledTwice
-    })
-    it("works 2", () => {
         const o = object({})
         let cb = sinon.spy()
         const stop = observeObject(o, cb)

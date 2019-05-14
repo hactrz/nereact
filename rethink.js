@@ -366,6 +366,8 @@ export function observeObject(o, effect) {
 }
 
 export function areEqualShallow(a, b) {
+    if (a === b)
+        return true
     for(let key of Object.keys(a)) {
         if(!(key in b) || a[key] !== b[key]) {
             return false

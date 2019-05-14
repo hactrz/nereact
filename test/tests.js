@@ -1,6 +1,6 @@
 import {
     box, computed, autorun, reaction, observe, whenever, when, array, object, decorate, observeObject, clear
-} from './rethink.js'
+} from '../rethink.js'
 
 import 'https://unpkg.com/mocha/mocha.js'
 import 'https://unpkg.com/chai/chai.js'

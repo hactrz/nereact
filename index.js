@@ -215,44 +215,73 @@ function updateElement($parent, newNode, oldNode, index = 0) {
     }
 }
 
+function start(node, prevNode, children) {
+    function onUpdate(nestedTree) {
+        let flatTree = connectChildrenToSlot(flatTreeFromNode(nestedTree, prevNode && prevNode.nestedTree), children)
+        if (prevNode)
+            updateFlatTree(flatTree, prevNode.flatTree)
+        node.nestedTree = nestedTree
+        node.flatTree = flatTree
+        prevNode = node
+    }
 
-function runComponent(node, prevNode, onUpdate) {
+    const s = reaction(() => node.treeMaker(node.props, node.state), onUpdate, {fireImmediately: true})
+    node.stop = function stop(unmount=true) {
+        s()
+        if (unmount && typeof node.state.unmount === 'function')
+            node.state.unmount()
+    }
+}
+
+function unmount(node) {
+    if (!node)
+        return
+    for (let child of (node.children || [])) {
+        if (child && child.stop)
+            unmount(child)
+    }
+    if (node && node.stop)
+        node.stop()
+}
+
+function flatTreeFromComponent(node, prevNode, children) {
     if (node.dom)
         throw TypeError('Cannot make tree from DOM virtual node')
-
-    const build = () => node.treeMaker(node.props, node.state)
 
     const sameComp = prevNode && prevNode.treeMaker === node.treeMaker
     if (sameComp) {
         node.state = prevNode.state
-        if (!areEqualShallow(node.props, prevNode.props))
-            onUpdate(build())
+        if (!areEqualShallow(node.props, prevNode.props)) {
+            prevNode.stop(false)
+            start(node, prevNode, children)
+        } else {
+            node.nestedTree = prevNode.nestedTree
+            node.flatTree = connectChildrenToSlot(flatTreeFromNode(node.nestedTree, prevNode.nestedTree), children)
+        }
     }
     else {
-        //todo destroy prev state and call unmount
         node.state = object({})
-        reaction(build, onUpdate, {fireImmediately: true})
+        start(node, prevNode, children)
     }
+    return node.flatTree
 }
 
 function flatTreeFromNode(node, prevNode) {
-    //todo destroy prev state and call unmount if node type changes
+    //destroy prev state and call unmount if node type changes
+    if (checkVDOMObject(prevNode) && (!checkVDOMObject(node) || node.treeMaker !== prevNode.treeMaker))
+        unmount(prevNode)
     if (isPrimitive(node) || node.treeMaker === Slot)
         return node
-    //todo destroy prev state and call unmount
-    const children = node.children.map((c, i) => flatTreeFromNode(c, prevNode ? prevNode.children[i] : undefined))
+    const children = node.children.map((c, i) => flatTreeFromNode(c, prevNode && prevNode.children[i]))
+    if (checkVDOMObject(prevNode)) {
+        for (let i = node.children.length; i < prevNode.children.length; i++) {
+            unmount(prevNode.children[i])
+        }
+    }
     if (node.dom)
         return {...node, children}
 
-    let prevFlatTree = null, prevNestedTree
-    runComponent(node, prevNode, nestedTree => {
-        let flatTree = connectChildrenToSlot(flatTreeFromNode(nestedTree, prevNestedTree), children)
-        if (prevFlatTree)
-            updateFlatTree(flatTree, prevFlatTree)
-        prevFlatTree = flatTree
-        prevNestedTree = nestedTree
-    })
-    return prevFlatTree
+    return flatTreeFromComponent(node, prevNode, children)
 }
 
 function connectChildrenToSlot(flatTree, children) {
@@ -271,6 +300,8 @@ function connectChildrenToSlot(flatTree, children) {
 }
 
 function updateFlatTree(tree, prevTree) {
+    if (tree.el)
+        return
     const {el} = prevTree
     updateElement(el.parentNode, tree, prevTree, Array.from(el.parentNode.childNodes).indexOf(el))
 }

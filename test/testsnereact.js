@@ -1,5 +1,5 @@
 import {render, h} from '../index.js'
-import {clear} from "../rethink.js"
+import {clear, runInAction} from '../rethink.js'
 
 import 'https://unpkg.com/mocha/mocha.js'
 import 'https://unpkg.com/chai/chai.js'
@@ -256,6 +256,37 @@ describe("props", () => {
         chai.assert.deepEqual(el.lastElementChild.textContent, 'two')
 
     })
+    it("children prop updated", () => {
+        let cb, stateOne
+        function Todo(props, state) {
+            let {title} = props
+            let {edit = false} = state
+            stateOne = state
+
+            cb = function onSave(text) {
+                props.onEdit(text)
+                state.edit = false
+            }
+
+            return h('span', null, edit ? h('div', null, title) : h('span', null, title))
+        }
+
+        function TodoList(props, state) {
+            if (!state.todo)
+                state.todo = '1'
+
+            console.log(state.todo)
+            return h(Todo, {title: state.todo, onEdit: text => state.todo = text})
+        }
+        const el = document.getElementById('tests')
+        render(el, h(TodoList))
+        stateOne.edit = true
+        cb('2')
+        chai.assert.deepEqual(el.lastElementChild.textContent, '2')
+        stateOne.edit = true
+        cb('3')
+        chai.assert.deepEqual(el.lastElementChild.textContent, '3')
+    })
 })
 
 describe("unmount", () => {
@@ -358,6 +389,36 @@ describe("unmount", () => {
         chai.assert.deepEqual(el.lastElementChild.textContent, 'red')
         one.should.have.been.calledTwice
         cb.should.have.been.callCount(0)
+    })
+    it("props", () => {
+        let state
+        const el = document.createElement('div')
+        const cb = sinon.spy()
+        function One(props, state) {
+            let {title} = props
+            if (!state.unmount)
+                state.unmount = cb
+            return h('div', null, title)
+        }
+        const one = sinon.spy(One)
+
+        function Comp(props, s) {
+            if (!s.todosList) {
+                s.todosList = [
+                    {id: 0, title: 'Дело раз'},
+                    {id: 1, title: 'Дело два'},
+                    {id: 2, title: 'Дело три'}
+                ]
+            }
+            state = s
+            return h('div', {className: 'todo-wrap'}, ...s.todosList.map(todo => h(one, {title: todo.title})))
+        }
+
+        render(el, h(Comp, null))
+        chai.assert.deepEqual(el.lastElementChild.className, 'todo-wrap')
+        state.todosList.splice(2, 1)
+        one.should.have.been.callCount(3)
+        cb.should.have.been.calledOnce
     })
 })
 

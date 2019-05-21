@@ -1,5 +1,5 @@
 import {
-    box, computed, autorun, reaction, observe, whenever, when, array, object, decorate, observeObject, clear
+    box, computed, autorun, reaction, observe, whenever, when, array, object, decorate, observeObject, clear, runInAction
 } from '../rethink.js'
 
 import 'https://unpkg.com/mocha/mocha.js'
@@ -258,6 +258,13 @@ describe("array", () => {
         a.push(3)
         cb.should.have.been.calledTwice
     })
+    it("splice", () => {
+        const a = array([{id: 1, content: 'one'}, {id: 2, content: 'two'}, {id: 3, content: 'three'}])
+        let cb = sinon.spy()
+        reaction(() => a.map(e => e), cb)
+        a.splice(2, 1)
+        cb.should.have.been.calledOnce
+    })
 })
 
 describe("object", () => {
@@ -326,6 +333,22 @@ describe("observeObject", () => {
         cb.should.have.been.calledTwice
         stop()
         o.hey = 3
+        cb.should.have.been.calledTwice
+    })
+})
+
+describe("runInAction", () => {
+    it("works", () => {
+        let o = box('cat')
+        let cb = sinon.spy(()=> o.get())
+        autorun(cb)
+        cb.should.have.been.calledOnce
+        runInAction(() => {
+            o.set('dog')
+            cb.should.have.been.calledOnce
+            o.set('asd')
+            cb.should.have.been.calledOnce
+        })
         cb.should.have.been.calledTwice
     })
 })

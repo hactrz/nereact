@@ -11,7 +11,8 @@ class Cell {
         do {
             Cell.runPending.active = true
             for (const cell of Array.from(Cell.Pending))
-                cell.actualize()
+                if (Cell.Pending.has(cell))
+                    cell.actualize()
             Cell.runPending.active = false
             count++
             if (count >= 100)
@@ -68,8 +69,11 @@ class Cell {
         }
         CurrentObserver = currentObserver
         for (const dep of oldDependencies) {
-            if (!this.dependencies.has(dep))
+            if (!this.dependencies.has(dep)) {
                 dep.reactions.delete(this)
+                if (dep.reactions.size === 0)
+                    dep.unsubscribe()
+            }
         }
         this.set(newValue)
     }
@@ -102,6 +106,8 @@ class Cell {
     }
 
     unsubscribe() {
+        if (!this.dependencies.size)
+            return
         for (const dep of this.dependencies) {
             dep.reactions.delete(this)
             if (dep.reactions.size === 0)
@@ -171,7 +177,7 @@ export function computed(computedFn) {
  */
 export function autorun(effect) {
     const cell = new Cell(null, effect, true)
-    cell.get()
+    cell.actualize()
     return () => cell.unsubscribe()
 }
 
@@ -247,6 +253,15 @@ export function decorate(object, decorator) {
     }
 }
 
+function wrapAction(target, prop, actions) {
+    if (!actions.includes(prop))
+        return target[prop]
+    return function() {
+        const args = arguments
+        return runInAction(() => target[prop].apply(this, args))
+    }
+}
+
 /**. Делает наблюдаемыми элементы массива а так же его длину
  * @param {Array} arr - Массив, элементы и длина которого должны стать наблюдаемыми
  */
@@ -255,13 +270,13 @@ export function array(arr) {
         throw TypeError('Argument must be an array')
     if (isObservableObject(arr))
         return arr
+    const actions = ['splice']
     let map = new Map(arr.map((v, i) => [String(i), observable(v)]))
     map.set('length', observable(arr.length))
-    arr[$s] = true
     return new Proxy(arr, {
         get(target, prop) {
             const res = map.get(prop)
-            return res ? res.get() : target[prop]
+            return res ? res.get() : wrapAction(target, prop, actions)
         },
         set(target, prop, value, self) {
             if (isObject(value))
@@ -379,4 +394,12 @@ export function areEqualShallow(a, b) {
         }
     }
     return true
+}
+
+export function runInAction(fn) {
+    Cell.runPending.active = true
+    const res = fn()
+    Cell.runPending.active = false
+    Cell.runPending()
+    return res
 }
